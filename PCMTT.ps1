@@ -359,9 +359,12 @@ function Show-Instructions {
     Write-Host "24) DNS Benchmark: Find the fastest DNS for your network."
     Write-Host "25) System Change Monitoring: Logs key system changes including device installations, network adapter changes, and system events."
     Write-Host "26) Set Firewall Security Level: Configure the firewall's security level (Lockdown, Strict, Medium, Low, Default)."
+    Write-Host "27) Paping (Ping + Port) Network Diagnostic Tool: Performs ping and port diagnostic tests using Paping."
+    Write-Host "28) MTR (My Traceroute) Network Diagnostic Tool: Runs a traceroute and network analysis."
     Write-Host " 0) Exit: Closes the script."
     Write-Host ""
 }
+
 
 
 # 15. DriverUpdates"
@@ -1524,12 +1527,6 @@ function Show-Paping {
 
 
     
-    
-    
-    
-
-    
-
 
 ###############################################################################
 # STEP 4: Main Menu Logic
