@@ -67,6 +67,20 @@ The **PC Maintenance & Troubleshooting Toolkit** is a comprehensive PowerShell s
 
 ---
 
+## **Important Note**
+
+If your antivirus settings are strict, this script may be flagged because it uses PowerShell. To avoid interruptions:
+
+1. Temporarily disable your antivirus software or exclude this script from antivirus scans.
+2. Add the script's directory to your antivirus exclusions list:
+   - Open your antivirus settings.
+   - Navigate to the exclusions section.
+   - Add the script's folder or `.ps1` file to the list of excluded items.
+
+This ensures uninterrupted operation of the toolkit.
+
+---
+
 ## **Troubleshooting**
 
 - Ensure PowerShell is running as an administrator.
@@ -84,5 +98,3 @@ The **PC Maintenance & Troubleshooting Toolkit** is a comprehensive PowerShell s
 - **Developer**: Sergio Marquina
 
 ---
-
-This update reflects all the latest menu options, including **Paping** and **MTR**, and refines the descriptions for clarity. Let me know if further modifications are needed!
