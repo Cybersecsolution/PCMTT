@@ -270,7 +270,7 @@ function Test-NetworkSpeed {
         } else {
             Write-Host "Speedtest CLI is not installed. Attempting to install Speedtest using winget..." -ForegroundColor Cyan
             if ((Get-Command "winget" -ErrorAction SilentlyContinue)) {
-                & winget install --id Ookla.Speedtest.CLI -e | Out-Null
+                & winget install --id Ookla.Speedtest.CLI -e -q
                 if ((Get-Command "speedtest" -ErrorAction SilentlyContinue)) {
                     $speedtestInstalled = $true
                 } else {
@@ -287,33 +287,40 @@ function Test-NetworkSpeed {
         if ($speedtestInstalled) {
             Write-Host "Running Speedtest..." -ForegroundColor Cyan
 
-            # Capture and process CLI output
-            $speedtestOutput = speedtest --accept-license --format=json 2>&1 | ConvertFrom-Json
+            try {
+                # Capture CLI output
+                $speedtestRawOutput = speedtest --accept-license --format=json 2>&1
 
-            if ($speedtestOutput -is [System.Management.Automation.ErrorRecord]) {
-                Write-Host "Speedtest failed: $($speedtestOutput)" -ForegroundColor Red
-                return
-            }
+                if (-not $speedtestRawOutput) {
+                    Write-Host "Speedtest failed: No output received." -ForegroundColor Red
+                    return
+                }
 
-            $downloadSpeedMbps = [math]::Round(($speedtestOutput.download.bandwidth * 8) / 1MB, 2)
-            $uploadSpeedMbps = [math]::Round(($speedtestOutput.upload.bandwidth * 8) / 1MB, 2)
-            $pingMs = [math]::Round($speedtestOutput.ping.latency, 2)
+                # Convert output to JSON
+                $speedtestOutput = $speedtestRawOutput | ConvertFrom-Json
 
-            # Display results (no duplicates)
-            Write-Host "`nSpeedtest Results:" -ForegroundColor Green
-            Write-Host "Download Speed: $downloadSpeedMbps Mbps" -ForegroundColor Green
-            Write-Host "Upload Speed: $uploadSpeedMbps Mbps" -ForegroundColor Green
-            Write-Host "Ping: $pingMs ms" -ForegroundColor Green
+                $downloadSpeedMbps = [math]::Round(($speedtestOutput.download.bandwidth * 8) / 1MB, 2)
+                $uploadSpeedMbps = [math]::Round(($speedtestOutput.upload.bandwidth * 8) / 1MB, 2)
+                $pingMs = [math]::Round($speedtestOutput.ping.latency, 2)
 
-            # Determine network quality
-            if ($pingMs -lt 20 -and $downloadSpeedMbps -ge 100) {
-                Write-Host "Network Quality: Excellent (Low latency, high speed)" -ForegroundColor Green
-            } elseif ($pingMs -lt 50 -and $downloadSpeedMbps -ge 50) {
-                Write-Host "Network Quality: Good (Moderate latency, decent speed)" -ForegroundColor Yellow
-            } elseif ($pingMs -lt 100 -and $downloadSpeedMbps -ge 20) {
-                Write-Host "Network Quality: Fair (Higher latency, slower speed)" -ForegroundColor Yellow
-            } else {
-                Write-Host "Network Quality: Poor (High latency, low speed)" -ForegroundColor Red
+                # Display results
+                Write-Host "`nSpeedtest Results:" -ForegroundColor Green
+                Write-Host "Download Speed: $downloadSpeedMbps Mbps" -ForegroundColor Green
+                Write-Host "Upload Speed: $uploadSpeedMbps Mbps" -ForegroundColor Green
+                Write-Host "Ping: $pingMs ms" -ForegroundColor Green
+
+                # Determine network quality
+                if ($pingMs -lt 20 -and $downloadSpeedMbps -ge 100) {
+                    Write-Host "Network Quality: Excellent (Low latency, high speed)" -ForegroundColor Green
+                } elseif ($pingMs -lt 50 -and $downloadSpeedMbps -ge 50) {
+                    Write-Host "Network Quality: Good (Moderate latency, decent speed)" -ForegroundColor Yellow
+                } elseif ($pingMs -lt 100 -and $downloadSpeedMbps -ge 20) {
+                    Write-Host "Network Quality: Fair (Higher latency, slower speed)" -ForegroundColor Yellow
+                } else {
+                    Write-Host "Network Quality: Poor (High latency, low speed)" -ForegroundColor Red
+                }
+            } catch {
+                Write-Host "Failed to parse Speedtest output: $($_.Exception.Message)" -ForegroundColor Red
             }
         }
     } catch {
@@ -321,9 +328,10 @@ function Test-NetworkSpeed {
     }
 }
 
+
 # 14. Instructions
 function Show-Instructions {
-    Write-Host "`n[Option 27] Instructions:" -ForegroundColor Cyan
+    Write-Host "`n[Option 14] Instructions:" -ForegroundColor Cyan
     Write-Host "`nPC Maintenance & Troubleshooting Toolkit Instructions:`n" -ForegroundColor Green
     Write-Host " 1) System File Checker (SFC): Scans and repairs corrupted Windows files."
     Write-Host " 2) DISM (Scan & Restore): Repairs the Windows component store."
@@ -357,64 +365,10 @@ function Show-Instructions {
 
 
 # 15. DriverUpdates"
-function Invoke-DriverUpdates {
-    Write-Host "`n[Option 14] Checking for Outdated Drivers..." -ForegroundColor Cyan
 
-    # Path for third-party driver updater tool (Snappy Driver Installer)
-    $sdiDownloadUrl = "https://downloads.sourceforge.net/project/snappy-driver-installer/SDI_R2104.zip"
-    $sdiInstallerPath = "$env:TEMP\SnappyDriverInstaller.zip"
-    $sdiExtractPath = "$env:TEMP\SnappyDriverInstaller"
 
-    try {
-        # Step 1: Use PnPUtil to list drivers
-        Write-Host "Scanning for outdated drivers using PnPUtil..." -ForegroundColor Yellow
-        $drivers = pnputil /enum-drivers
 
-        # Parse the output for installed drivers
-        if ($drivers -match "Published Name") {
-            Write-Host "Installed drivers detected. Please review the following list:" -ForegroundColor Green
-            Write-Host $drivers -ForegroundColor White
-
-            Write-Host "`nTo manually update drivers, use the following commands:" -ForegroundColor Cyan
-            Write-Host "1) pnputil /add-driver <INF_PATH> /install  # Installs a driver" -ForegroundColor Yellow
-            Write-Host "2) pnputil /delete-driver <DRIVER_NAME> /uninstall  # Uninstalls a driver" -ForegroundColor Yellow
-        } else {
-            Write-Host "No drivers detected using PnPUtil. Ensure you are running as Administrator." -ForegroundColor Red
-        }
-
-        # Step 2: Offer to download Snappy Driver Installer for advanced updates
-        Write-Host "`nDo you want to download and run Snappy Driver Installer (recommended for advanced driver updates)? (Y/N)" -ForegroundColor Cyan
-        $response = Read-Host "Enter your choice"
-        if ($response -eq "Y" -or $response -eq "y") {
-            # Download the installer
-            Write-Host "Downloading Snappy Driver Installer..." -ForegroundColor Cyan
-            Invoke-WebRequest -Uri $sdiDownloadUrl -OutFile $sdiInstallerPath -ErrorAction Stop
-            Write-Host "Snappy Driver Installer downloaded successfully to $sdiInstallerPath" -ForegroundColor Green
-
-            # Extract the installer
-            Write-Host "Extracting Snappy Driver Installer..." -ForegroundColor Cyan
-            Expand-Archive -Path $sdiInstallerPath -DestinationPath $sdiExtractPath -Force
-
-            # Run Snappy Driver Installer
-            $sdiExePath = Join-Path -Path $sdiExtractPath -ChildPath "SDI_R2104.exe"
-            if (Test-Path $sdiExePath) {
-                Write-Host "Launching Snappy Driver Installer..." -ForegroundColor Cyan
-                Start-Process -FilePath $sdiExePath -Wait
-            } else {
-                Write-Host "Snappy Driver Installer executable not found after extraction. Please run it manually." -ForegroundColor Red
-            }
-        }
-    } catch {
-        Write-Host "Driver Updates failed: $($_.Exception.Message)" -ForegroundColor Red
-    } finally {
-        # Cleanup temporary files
-        if (Test-Path $sdiInstallerPath) {
-            Remove-Item -Path $sdiInstallerPath -Force
-        }
-    }
-}
-
-# 16. System Performance Analysis"
+# 15. System Performance Analysis"
 function Test-PerformanceAnalysis {
     Write-Host "`n[Option 15] Performing System Performance Analysis..." -ForegroundColor Cyan
 
@@ -677,9 +631,9 @@ function Invoke-FileIntegrityCheck {
 }
 
 
-# 22. System Information Export
+# 21. System Information Export
 function Export-SystemInfo {
-    Write-Host "`n[Option 22] Exporting System Information..." -ForegroundColor Cyan
+    Write-Host "`n[Option 21] Exporting System Information..." -ForegroundColor Cyan
 
     try {
         # Define the output folder and file path
@@ -824,7 +778,7 @@ function Export-SystemInfo {
 
 # 22. Reset System Components (Fix Windows Search, Defender, etc.)
 function Reset-SystemComponents {
-    Write-Host "`n[Option 24] Resetting System Components..." -ForegroundColor Cyan
+    Write-Host "`n[Option 22] Resetting System Components..." -ForegroundColor Cyan
     
     try {
         # Ensure the script is running with administrator privileges
@@ -1221,7 +1175,7 @@ function Watch-SystemChange {
 }
 
 
-# 27. Firewall Configuration)function Clear-BrowserData {
+# 26. Firewall Configuration)function Clear-BrowserData {
     function Clear-BrowserData {
         Write-Host "`nClearing browser data..." -ForegroundColor Cyan
         
@@ -1385,6 +1339,195 @@ function Watch-SystemChange {
             }
         }
     }
+
+# 27. MTR (My Traceroute) Network Diagnostic Tool 
+function Show-WinMTR {
+    # Step 1: Check if WSL is installed
+    try {
+        wsl --version 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "WSL is already installed."
+        } else {
+            Write-Host "WSL is not installed. Installing now..."
+            wsl --install >$null 2>&1
+            Write-Host "WSL installation completed. A reboot is recommended."
+            $rebootChoice = Read-Host "Do you want to reboot now? (yes/no)"
+            if ($rebootChoice -eq "yes") {
+                Write-Host "Rebooting the system..."
+                shutdown.exe /r /t 0
+                return
+            } else {
+                Write-Host "Please reboot manually to complete the WSL installation."
+                return
+            }
+        }
+    } catch {
+        Write-Host "WSL is not installed. Proceeding with installation..."
+        wsl --install >$null 2>&1
+        Write-Host "WSL installation completed. A reboot is recommended."
+        $rebootChoice = Read-Host "Do you want to reboot now? (yes/no)"
+        if ($rebootChoice -eq "yes") {
+            Write-Host "Rebooting the system..."
+            shutdown.exe /r /t 0
+            return
+        } else {
+            Write-Host "Please reboot manually to complete the WSL installation."
+            return
+        }
+    }
+
+    # Step 2: Check if a Linux distribution is installed in WSL
+    try {
+        $distroList = wsl --list --quiet 2>$null
+        if ([string]::IsNullOrWhiteSpace($distroList)) {
+            Write-Host "No Linux distribution is installed. Installing Ubuntu..."
+            wsl --install >$null 2>&1
+            Write-Host "Linux distribution installation completed. A reboot is recommended."
+            $rebootChoice = Read-Host "Do you want to reboot now? (yes/no)"
+            if ($rebootChoice -eq "yes") {
+                Write-Host "Rebooting the system..."
+                shutdown.exe /r /t 0
+                return
+            } else {
+                Write-Host "Please reboot manually to complete the Linux distribution installation."
+                return
+            }
+        } else {
+            Write-Host "A Linux distribution is already installed in WSL."
+        }
+    } catch {
+        Write-Error "Failed to check or install a Linux distribution in WSL. Debug information: $_"
+        return
+    }
+
+    # Step 3: Configure sudo globally for passwordless access
+    try {
+        wsl -u root -e bash -c "echo 'ALL ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/passwordless" 2>$null
+        wsl -u root -e bash -c "chmod 440 /etc/sudoers.d/passwordless" 2>$null
+    } catch {
+        Write-Error "Failed to configure global passwordless sudo in WSL. Debug information: $_"
+        return
+    }
+
+    # Step 4: Check if MTR is installed in WSL
+    try {
+        $mtrCheck = wsl -e which mtr 2>$null
+        if ([string]::IsNullOrWhiteSpace($mtrCheck)) {
+            Write-Host "MTR is not installed in WSL. Installing now..."
+            wsl -e sudo apt-get update -y >$null 2>&1
+            wsl -e sudo apt-get install -y mtr >$null 2>&1
+            Write-Host "MTR installation completed in WSL."
+        }
+    } catch {
+        Write-Error "Failed to check or install MTR in WSL. Debug information: $_"
+        return
+    }
+
+    # Step 5: Prompt user for the target hostname or IP
+    $target = Read-Host "Enter the target host (Domain/IP)"
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Write-Host "No target specified. Exiting."
+        return
+    }
+
+    # Step 6: Run MTR in WSL and display the results with a single color
+    try {
+        Write-Host "Running MTR to $target in WSL..."
+        $output = wsl -e sudo mtr -r -c 10 $target | Out-String
+        Write-Host "MTR Results:" -ForegroundColor Green
+        Write-Host "-------------------" -ForegroundColor Green
+        Write-Host $output -ForegroundColor Green
+    } catch {
+        Write-Error "Failed to run MTR in WSL. Debug information: $_"
+    }
+}
+
+
+# 28. Paping (Ping + Port) Network Diagnostic Tool
+
+function Show-Paping {
+    # Define the Paping executable path and download URL
+    $userProfile = [Environment]::GetFolderPath("UserProfile")
+    $defaultPath = Join-Path -Path $userProfile -ChildPath "paping.exe"
+    $papingURL = "https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/paping/paping_1.5.5_x86_windows.zip"
+
+    # Step 1: Check if Paping is installed
+    Write-Host "Checking if Paping is installed..."
+    if (!(Test-Path $defaultPath)) {
+        Write-Host "Paping is not installed."
+
+        # Step 2: Prompt the user to download and install Paping
+        $installChoice = Read-Host "Do you want to download and install Paping? (yes/no)"
+        if ($installChoice -eq "yes") {
+            # Set the installation path to the user's home directory
+            $installPath = $userProfile
+
+            # Ensure the directory exists
+            if (!(Test-Path $installPath)) {
+                New-Item -ItemType Directory -Path $installPath | Out-Null
+            }
+
+            # Download Paping
+            try {
+                Write-Host "Downloading Paping from $papingURL..."
+                $zipPath = "$env:TEMP\Paping.zip"
+                Invoke-WebRequest -Uri $papingURL -OutFile $zipPath -ErrorAction Stop
+                Write-Host "Download successful. Extracting Paping..."
+
+                # Extract Paping.exe from the ZIP file
+                $shell = New-Object -ComObject Shell.Application
+                $zip = $shell.NameSpace($zipPath)
+                $destination = $shell.NameSpace($installPath)
+                $destination.CopyHere($zip.Items(), 16)
+
+                # Clean up the ZIP file
+                Remove-Item -Path $zipPath -Force
+                Write-Host "Paping installed successfully to $installPath."
+            } catch {
+                Write-Error "Failed to download or install Paping. Debug information: $_"
+                return
+            }
+        } else {
+            Write-Host "Paping installation aborted. Exiting."
+            return
+        }
+    } else {
+        Write-Host "Paping is already installed at $defaultPath."
+    }
+
+    # Step 4: Prompt the user for the target IP and port
+    $targetIP = Read-Host "Enter the Host Name (e.g., 8.8.8.8)"
+    if ([string]::IsNullOrWhiteSpace($targetIP)) {
+        Write-Host "No Host Name specified. Exiting."
+        return
+    }
+
+    $targetPort = Read-Host "Enter the Host Port (e.g., 80)"
+    if ([string]::IsNullOrWhiteSpace($targetPort)) {
+        Write-Host "No Host Port specified. Exiting."
+        return
+    }
+
+    # Step 5: Run Paping with the user inputs in Command Prompt
+    try {
+        Write-Host "Launching Command Prompt to run Paping..."
+        $cmdArguments = "/k ""$defaultPath $targetIP -p $targetPort"""
+        Start-Process -FilePath "cmd.exe" -ArgumentList $cmdArguments
+        Write-Host "Paping is running in a Command Prompt window."
+    } catch {
+        Write-Error "Failed to run Paping. Debug information: $_"
+    }
+}
+
+
+
+
+
+    
+    
+    
+    
+
     
 
 
@@ -1410,20 +1553,21 @@ function Show-Menu {
     Write-Host "11) Create System Restore Point"
     Write-Host "12) Advanced Scanning for Leftovers"
     Write-Host "13) Network Speed Test"
-    Write-Host "14) Driver Updates"
-    Write-Host "15) System Performance Analysis"
-    Write-Host "16) Disk Cleanup"  # New Option
-    Write-Host "17) Hard Drive Health Check"
-    Write-Host "18) USB Device Troubleshooting"
-    Write-Host "19) Windows Search Repair"
-    Write-Host "20) File Integrity Checker"
-    Write-Host "21) System Information Export (with File Modification Dates)"
-    Write-Host "22) Reset System Components: Fix Windows Search, Defender, etc."
-    Write-Host "23) Repair All Microsoft Programs"
-    Write-Host "24) DNS Benchmark: Find the fastest DNS for your network"
-    Write-Host "25) Check System Logs for Past Events"
-    Write-Host "26) Set Firewall Securit Level)"
-    Write-Host "27) Instructions"
+    Write-Host "14) System Performance Analysis"
+    Write-Host "15) Disk Cleanup"  # New Option
+    Write-Host "16) Hard Drive Health Check"
+    Write-Host "17) USB Device Troubleshooting"
+    Write-Host "18) Windows Search Repair"
+    Write-Host "19) File Integrity Checker"
+    Write-Host "20) System Information Export (with File Modification Dates)"
+    Write-Host "21) Reset System Components: Fix Windows Search, Defender, etc."
+    Write-Host "22) Repair All Microsoft Programs"
+    Write-Host "23) DNS Benchmark: Find the fastest DNS for your network"
+    Write-Host "24) Check System Logs for Past Events"
+    Write-Host "25) Set Firewall Security Level"
+    Write-Host "26) MTR (My Traceroute) Network Diagnostic Tool"
+    Write-Host "27) Paping (Ping + Port) Network Diagnostic Tool"
+    Write-Host "28) Instructions"
     Write-Host " 0) Exit"
     Write-Host ""
 }
@@ -1436,7 +1580,7 @@ Set-ConsoleAppearance
 
 while ($true) {
     Show-Menu
-    $selection = Read-Host "Enter your choice (0-27)"
+    $selection = Read-Host "Enter your choice (0-28)"  # Updated max choice to 26
     switch ($selection) {
         "1" { Invoke-SFC; Pause }
         "2" { Invoke-DISM; Pause }
@@ -1451,30 +1595,32 @@ while ($true) {
         "11" { New-SystemRestorePoint; Pause }
         "12" { Invoke-AdvancedScanning; Pause }
         "13" { Test-NetworkSpeed; Pause }
-        "14" { Invoke-DriverUpdates; Pause }
-        "15" { Test-PerformanceAnalysis; Pause }
-        "16" { Invoke-DiskClean; Pause }  # New Disk Cleanup function
-        "17" { Test-HardDriveHealth; Pause }
-        "18" { Invoke-USBDeviceTroubleshooting; Pause }
-        "19" { Repair-WindowsSearch; Pause }
-        "20" { Invoke-FileIntegrityCheck; Pause }
-        "21" { Export-SystemInfo; Pause }
-        "22" { Reset-SystemComponents; Pause }
-        "23" { Repair-Microsoft-Programs; Pause }
-        "24" { Test-DNSPerformance; Pause }
-        "25" { Watch-SystemChange; Pause }
-        "26" { Set-FirewallSecurityLevel; Pause }
-        "27" { Show-Instructions; Pause }
+        "14" { Test-PerformanceAnalysis; Pause }  
+        "15" { Invoke-DiskClean; Pause }  
+        "16" { Test-HardDriveHealth; Pause }  
+        "17" { Invoke-USBDeviceTroubleshooting; Pause }  
+        "18" { Repair-WindowsSearch; Pause }  
+        "19" { Invoke-FileIntegrityCheck; Pause }  
+        "20" { Export-SystemInfo; Pause }  
+        "21" { Reset-SystemComponents; Pause }  
+        "22" { Repair-Microsoft-Programs; Pause }  
+        "23" { Test-DNSPerformance; Pause } 
+        "24" { Watch-SystemChange; Pause }  
+        "25" { Set-FirewallSecurityLevel; Pause } 
+        "26" { Show-WinMTR; Pause } 
+        "27" { Show-paping; Pause } 
+        "28" { Show-Instructions; Pause }    
 
         "0" {
             Write-Host "Exiting PC Maintenance Toolkit. Goodbye!" -ForegroundColor Green
             break
         }
         default {
-            Write-Host "Invalid choice. Please select 0-27." -ForegroundColor Yellow
+            Write-Host "Invalid choice. Please select 0-28." -ForegroundColor Yellow  # Updated range
             Pause
         }
     }
 }
+
 
 
